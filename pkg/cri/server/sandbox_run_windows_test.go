@@ -19,6 +19,7 @@ package server
 import (
 	"testing"
 
+	criconfig "github.com/containerd/containerd/pkg/cri/config"
 	imagespec "github.com/opencontainers/image-spec/specs-go/v1"
 	runtimespec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
@@ -98,7 +99,7 @@ func TestSandboxWindowsNetworkNamespace(t *testing.T) {
 	c := newTestCRIService()
 
 	config, imageConfig, specCheck := getRunPodSandboxTestData()
-	spec, err := c.sandboxContainerSpec(testID, config, imageConfig, nsPath, nil)
+	spec, err := c.sandboxContainerSpec(testID, config, imageConfig, nsPath, criconfig.Runtime{})
 	assert.NoError(t, err)
 	assert.NotNil(t, spec)
 	specCheck(t, testID, spec)

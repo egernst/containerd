@@ -187,6 +187,11 @@ version = 2
       # config files being loaded from the CNI config directory.
       cni_max_conf_num = 1
 
+      # sandbox_sizing_from_pause_container allows specifying the sandbox resource requirements via the pause container
+      # when creating a sandbox using the task service API. Only a runtime that expects to consume this sizing information
+      # and still constrain pause container appropriately should set this to true.
+      sandbox_sizing_from_pause_container = false
+
       # 'plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options' is options specific to
       # "io.containerd.runc.v1" and "io.containerd.runc.v2". Its corresponding options type is:
       #   https://github.com/containerd/containerd/blob/v1.3.2/runtime/v2/runc/options/oci.pb.go#L26 .

@@ -62,6 +62,10 @@ type Runtime struct {
 	// be loaded from the cni config directory by go-cni. Set the value to 0 to
 	// load all config files (no arbitrary limit). The legacy default value is 1.
 	NetworkPluginMaxConfNum int `toml:"cni_max_conf_num" json:"cniMaxConfNum"`
+	// SandboxSizingFromPauseContainer allows specifying the sandbox resource requirements within the pause container's runtime spec
+	// when creating a sandbox using the task service API. Only a runtime that expects to consume this sizing information
+	// and still constrain pause container appropriately should set this to true.
+	SandboxSizingFromPauseContainer bool `toml:"sandbox_sizing_from_pause_container" json:"sandbox_sizing_from_pause_container"`
 }
 
 // ContainerdConfig contains toml config related to containerd

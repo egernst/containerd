@@ -28,9 +28,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
+	v1 "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	"github.com/containerd/containerd/pkg/cri/annotations"
 	criconfig "github.com/containerd/containerd/pkg/cri/config"
+	"github.com/containerd/containerd/pkg/cri/opts"
 	sandboxstore "github.com/containerd/containerd/pkg/cri/store/sandbox"
 )
 
@@ -42,11 +44,12 @@ func TestSandboxContainerSpec(t *testing.T) {
 	testID := "test-id"
 	nsPath := "test-cni"
 	for desc, test := range map[string]struct {
-		configChange      func(*runtime.PodSandboxConfig)
-		podAnnotations    []string
-		imageConfigChange func(*imagespec.ImageConfig)
-		specCheck         func(*testing.T, *runtimespec.Spec)
-		expectErr         bool
+		configChange         func(*runtime.PodSandboxConfig)
+		podAnnotations       []string
+		runtimeSandboxSizing bool
+		imageConfigChange    func(*imagespec.ImageConfig)
+		specCheck            func(*testing.T, *runtimespec.Spec)
+		expectErr            bool
 	}{
 		"should return error when entrypoint and cmd are empty": {
 			imageConfigChange: func(c *imagespec.ImageConfig) {
@@ -59,6 +62,7 @@ func TestSandboxContainerSpec(t *testing.T) {
 			podAnnotations: []string{"c"},
 			specCheck: func(t *testing.T, spec *runtimespec.Spec) {
 				assert.Equal(t, spec.Annotations["c"], "d")
+				assert.EqualValues(t, *spec.Linux.Resources.CPU.Shares, opts.DefaultSandboxCPUshares)
 			},
 		},
 		"a non-passthrough annotation should not be passed as an OCI annotation": {
@@ -70,6 +74,7 @@ func TestSandboxContainerSpec(t *testing.T) {
 				assert.Equal(t, spec.Annotations["c"], "d")
 				_, ok := spec.Annotations["d"]
 				assert.False(t, ok)
+				assert.EqualValues(t, *spec.Linux.Resources.CPU.Shares, opts.DefaultSandboxCPUshares)
 			},
 		},
 		"passthrough annotations should support wildcard match": {
@@ -91,6 +96,65 @@ func TestSandboxContainerSpec(t *testing.T) {
 				assert.False(t, ok)
 			},
 		},
+		"sandbox sizing should be set if runtime is configured for this feature": {
+			configChange: func(c *runtime.PodSandboxConfig) {
+				c.Linux.Resources = &v1.LinuxContainerResources{
+					CpuPeriod:          100,
+					CpuQuota:           200,
+					CpuShares:          5000,
+					MemoryLimitInBytes: 1024,
+				}
+			},
+			runtimeSandboxSizing: true,
+			specCheck: func(t *testing.T, spec *runtimespec.Spec) {
+				assert.NotNil(t, spec.Linux)
+				assert.NotNil(t, spec.Linux.Resources)
+				assert.NotNil(t, spec.Linux.Resources.CPU)
+				assert.NotNil(t, spec.Linux.Resources.CPU.Shares)
+				assert.EqualValues(t, 5000, *spec.Linux.Resources.CPU.Shares)
+				assert.NotNil(t, spec.Linux.Resources.CPU.Period)
+				assert.EqualValues(t, 100, *spec.Linux.Resources.CPU.Period)
+				assert.NotNil(t, spec.Linux.Resources.CPU.Quota)
+				assert.EqualValues(t, 200, *spec.Linux.Resources.CPU.Quota)
+				assert.NotNil(t, spec.Linux.Resources.Memory)
+				assert.NotNil(t, spec.Linux.Resources.Memory.Limit)
+				assert.EqualValues(t, 1024, *spec.Linux.Resources.Memory.Limit)
+			},
+		},
+		"sandbox sizing should NOT be set if runtime is NOT configured for this feature": {
+			configChange: func(c *runtime.PodSandboxConfig) {
+				c.Linux.Resources = &v1.LinuxContainerResources{
+					CpuPeriod:          100,
+					CpuQuota:           200,
+					CpuShares:          5000,
+					MemoryLimitInBytes: 1024,
+				}
+			},
+			runtimeSandboxSizing: false,
+			specCheck: func(t *testing.T, spec *runtimespec.Spec) {
+				assert.NotNil(t, spec.Linux)
+				assert.NotNil(t, spec.Linux.Resources)
+				assert.NotNil(t, spec.Linux.Resources.CPU)
+				assert.NotNil(t, spec.Linux.Resources.CPU.Shares)
+				assert.EqualValues(t, opts.DefaultSandboxCPUshares, *spec.Linux.Resources.CPU.Shares)
+				assert.Nil(t, spec.Linux.Resources.CPU.Period)
+				assert.Nil(t, spec.Linux.Resources.CPU.Quota)
+				assert.Nil(t, spec.Linux.Resources.Memory)
+			},
+		},
+		"sandbox sizing should NOT be set if no resources are defined": {
+			runtimeSandboxSizing: true,
+			specCheck: func(t *testing.T, spec *runtimespec.Spec) {
+				assert.NotNil(t, spec.Linux)
+				assert.NotNil(t, spec.Linux.Resources)
+				assert.NotNil(t, spec.Linux.Resources.CPU)
+				assert.NotNil(t, spec.Linux.Resources.CPU.Shares)
+				assert.EqualValues(t, opts.DefaultSandboxCPUshares, *spec.Linux.Resources.CPU.Shares)
+				assert.Nil(t, spec.Linux.Resources.CPU.Period)
+				assert.Nil(t, spec.Linux.Resources.CPU.Quota)
+				assert.Nil(t, spec.Linux.Resources.Memory)
+			},
+		},
 	} {
 		t.Logf("TestCase %q", desc)
 		c := newTestCRIService()
@@ -103,7 +167,10 @@ func TestSandboxContainerSpec(t *testing.T) {
 			test.imageConfigChange(imageConfig)
 		}
 		spec, err := c.sandboxContainerSpec(testID, config, imageConfig, nsPath,
-			test.podAnnotations)
+			criconfig.Runtime{
+				PodAnnotations:                  test.podAnnotations,
+				SandboxSizingFromPauseContainer: test.runtimeSandboxSizing,
+			})
 		if test.expectErr {
 			assert.Error(t, err)
 			assert.Nil(t, spec)

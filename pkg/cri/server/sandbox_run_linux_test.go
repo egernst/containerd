@@ -29,7 +29,7 @@ import (
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	"github.com/containerd/containerd/pkg/cri/annotations"
-	"github.com/containerd/containerd/pkg/cri/opts"
+	criconfig "github.com/containerd/containerd/pkg/cri/config"
 	ostesting "github.com/containerd/containerd/pkg/os/testing"
 )
 
@@ -63,7 +63,6 @@ func getRunPodSandboxTestData() (*runtime.PodSandboxConfig, *imagespec.ImageConf
 		assert.Contains(t, spec.Process.Env, "a=b", "c=d")
 		assert.Equal(t, []string{"/pause", "forever"}, spec.Process.Args)
 		assert.Equal(t, "/workspace", spec.Process.Cwd)
-		assert.EqualValues(t, *spec.Linux.Resources.CPU.Shares, opts.DefaultSandboxCPUshares)
 		assert.EqualValues(t, *spec.Process.OOMScoreAdj, defaultSandboxOOMAdj)
 
 		t.Logf("Check PodSandbox annotations")
@@ -163,7 +162,7 @@ func TestLinuxSandboxContainerSpec(t *testing.T) {
 		if test.configChange != nil {
 			test.configChange(config)
 		}
-		spec, err := c.sandboxContainerSpec(testID, config, imageConfig, nsPath, nil)
+		spec, err := c.sandboxContainerSpec(testID, config, imageConfig, nsPath, criconfig.Runtime{})
 		if test.expectErr {
 			assert.Error(t, err)
 			assert.Nil(t, spec)
@@ -428,7 +427,7 @@ func TestSandboxDisableCgroup(t *testing.T) {
 	config, imageConfig, _ := getRunPodSandboxTestData()
 	c := newTestCRIService()
 	c.config.DisableCgroup = true
-	spec, err := c.sandboxContainerSpec("test-id", config, imageConfig, "test-cni", []string{})
+	spec, err := c.sandboxContainerSpec("test-id", config, imageConfig, "test-cni", criconfig.Runtime{})
 	require.NoError(t, err)
 
 	t.Log("resource limit should not be set")

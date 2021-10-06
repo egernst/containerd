@@ -22,13 +22,14 @@ package server
 import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/oci"
+	criconfig "github.com/containerd/containerd/pkg/cri/config"
 	imagespec "github.com/opencontainers/image-spec/specs-go/v1"
 	runtimespec "github.com/opencontainers/runtime-spec/specs-go"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func (c *criService) sandboxContainerSpec(id string, config *runtime.PodSandboxConfig,
-	imageConfig *imagespec.ImageConfig, nsPath string, runtimePodAnnotations []string) (_ *runtimespec.Spec, retErr error) {
+	imageConfig *imagespec.ImageConfig, nsPath string, ociRuntime criconfig.Runtime) (_ *runtimespec.Spec, retErr error) {
 	return c.runtimeSpec(id, "")
 }
 
